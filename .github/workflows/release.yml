@@ -1,1 +1,32 @@
-x
+# Push a tag like v1.0.1 → GitHub builds the extension zip and attaches it to a Release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check manifest version matches the tag
+        run: |
+          V=$(jq -r .version manifest.json)
+          [ "v$V" = "$GITHUB_REF_NAME" ] || { echo "manifest.json is $V but tag is $GITHUB_REF_NAME"; exit 1; }
+
+      - name: Build zip
+        run: |
+          zip -r "outline-$GITHUB_REF_NAME.zip" \
+            manifest.json background.js emulate.js devices.js \
+            viewer.html viewer.css viewer.js LICENSE _locales \
+            icons/icon16.png icons/icon32.png icons/icon48.png icons/icon128.png
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: outline-*.zip
+          generate_release_notes: true
