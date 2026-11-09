@@ -1,1 +1,74 @@
-x
+{
+  "extName": {
+    "message": "outline. — anteprima dispositivi"
+  },
+  "extDescription": {
+    "message": "Guarda qualsiasi sito come appare sugli ultimi iPhone, iPad, Galaxy, Pixel e pieghevoli — oppure ridimensionalo a piacere."
+  },
+  "actionTitle": {
+    "message": "Apri outline."
+  },
+  "placeholder": {
+    "message": "Incolla un link"
+  },
+  "go": {
+    "message": "Carica"
+  },
+  "rotate": {
+    "message": "Ruota (R)"
+  },
+  "fold": {
+    "message": "Apri / chiudi (F)"
+  },
+  "reload": {
+    "message": "Ricarica"
+  },
+  "zoom": {
+    "message": "Adatta alla finestra / 100% (Z)"
+  },
+  "openTab": {
+    "message": "Apri in una nuova scheda"
+  },
+  "emptyHint": {
+    "message": "Incolla un link qui sopra"
+  },
+  "madeBy": {
+    "message": "design e codice"
+  },
+  "fit": {
+    "message": "Adatta"
+  },
+  "responsive": {
+    "message": "Responsive"
+  },
+  "closed": {
+    "message": "chiuso"
+  },
+  "opened": {
+    "message": "aperto"
+  },
+  "approxHint": {
+    "message": "Valore approssimato: il produttore non pubblica le misure CSS, calcolato da risoluzione ÷ pixel ratio"
+  },
+  "desktopLarge": {
+    "message": "Desktop — grande"
+  },
+  "desktopMedium": {
+    "message": "Desktop — medio"
+  },
+  "desktopSmall": {
+    "message": "Desktop — piccolo"
+  },
+  "pageZoom": {
+    "message": "Zoom della pagina (+ / − / 0)"
+  },
+  "addSite": {
+    "message": "Aggiungi un sito da confrontare (max 5) — N"
+  },
+  "removeSite": {
+    "message": "Togli questo sito"
+  },
+  "emptySlot": {
+    "message": "vuoto"
+  }
+}
