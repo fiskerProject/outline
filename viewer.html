@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>outline.</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="icons/icon32.png" sizes="32x32">
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>outline.</span></div>
+
+    <form id="urlForm" class="url" autocomplete="off">
+      <span id="slotNo" class="slot-no" hidden>1</span>
+      <input id="url" type="text" spellcheck="false" data-i18n-placeholder="placeholder" placeholder="Paste a link">
+      <button type="submit" class="go" data-i18n-title="go" title="Go" aria-label="Go">
+        <svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <button id="add" class="icon add" data-i18n-title="addSite" title="Add a site to compare (max 5)">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <div class="tools">
+      <label class="select">
+        <select id="device" aria-label="Device"></select>
+      </label>
+
+      <div id="dims" class="dims" hidden>
+        <input id="rw" type="number" min="200" max="3840" aria-label="Width">
+        <span>×</span>
+        <input id="rh" type="number" min="200" max="3840" aria-label="Height">
+      </div>
+
+      <label id="pzWrap" class="select pz" data-i18n-title="pageZoom" title="Page zoom" hidden>
+        <select id="pz" aria-label="Page zoom"></select>
+      </label>
+
+      <button id="rotate" class="icon" data-i18n-title="rotate" title="Rotate">
+        <svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 8a9 9 0 0 1 3-4M3 4v4h4"/></svg>
+      </button>
+      <button id="fold" class="icon" data-i18n-title="fold" title="Fold / unfold" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14" stroke-dasharray="2 2"/></svg>
+      </button>
+      <button id="reload" class="icon" data-i18n-title="reload" title="Reload">
+        <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+      </button>
+      <button id="zoom" class="text" data-i18n-title="zoom" title="Zoom">Fit</button>
+      <button id="open" class="icon" data-i18n-title="openTab" title="Open in a new tab">
+        <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="stage">
+    <div id="grid"></div>
+    <p id="caption"></p>
+  </main>
+
+  <footer class="credits">
+    <span>outline.</span>
+    <span class="sep">—</span>
+    <span data-i18n="madeBy">design &amp; code</span>
+    <strong>Tommaso Chiusi</strong> <span class="sep">–</span> <strong>Luca Artesani</strong>
+    <span class="sep">×</span>
+    <a href="https://acadesign.eu" target="_blank" rel="noopener">acadesign.eu</a>
+    <span class="sep">·</span>
+    <span>open source, MIT</span>
+  </footer>
+
+  <template id="slotTpl">
+    <div class="slot">
+      <div class="sizer">
+        <div class="device-box">
+          <div class="frame frame-under"></div>
+          <div class="screen">
+            <p class="empty" data-i18n="emptyHint">Paste a link above</p>
+            <iframe class="view" title="Preview" referrerpolicy="no-referrer-when-downgrade"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-pointer-lock allow-presentation allow-storage-access-by-user-activation"
+              allow="autoplay; clipboard-write; fullscreen; encrypted-media; picture-in-picture"></iframe>
+            <div class="shield"></div>
+          </div>
+          <div class="frame frame-over"></div>
+          <div class="handle h-right" data-dir="x"></div>
+          <div class="handle h-bottom" data-dir="y"></div>
+          <div class="handle h-corner" data-dir="xy"></div>
+        </div>
+      </div>
+      <div class="slot-cap">
+        <button class="slot-name" type="button"></button>
+        <button class="slot-x" type="button" data-i18n-title="removeSite" title="Remove">×</button>
+      </div>
+    </div>
+  </template>
+
+  <script src="devices.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

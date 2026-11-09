@@ -1,0 +1,654 @@
+// outline. — viewer
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const el = {
+  form: $('urlForm'), url: $('url'), slotNo: $('slotNo'), add: $('add'),
+  device: $('device'), dims: $('dims'), rw: $('rw'), rh: $('rh'), pz: $('pz'), pzWrap: $('pzWrap'),
+  rotate: $('rotate'), fold: $('fold'), reload: $('reload'), zoom: $('zoom'), open: $('open'),
+  stage: $('stage'), grid: $('grid'), caption: $('caption'), tpl: $('slotTpl')
+};
+
+/* ── i18n ─────────────────────────────────────────── */
+
+const t = (key, fallback) => {
+  try { return chrome.i18n.getMessage(key) || fallback || key; } catch (e) { return fallback || key; }
+};
+function translate(root) {
+  root.querySelectorAll('[data-i18n]').forEach((n) => { n.textContent = t(n.dataset.i18n, n.textContent); });
+  root.querySelectorAll('[data-i18n-placeholder]').forEach((n) => { n.placeholder = t(n.dataset.i18nPlaceholder, n.placeholder); });
+  root.querySelectorAll('[data-i18n-title]').forEach((n) => {
+    const s = t(n.dataset.i18nTitle, n.title);
+    n.title = s; n.setAttribute('aria-label', s);
+  });
+}
+document.documentElement.lang = t('@@ui_locale', 'en').split('_')[0];
+translate(document);
+translate(el.tpl.content);
+
+/* ── State ────────────────────────────────────────── */
+
+const MAX_SITES = 5;
+const ALL = [RESPONSIVE, ...DEVICES];
+const byId = (id) => ALL.find((d) => d.id === id) || DEVICES[0];
+
+const state = {
+  urls: [''],         // up to 5 sites, compared side by side on the same device
+  active: 0,          // which site the link field edits
+  device: 'iphone-18-pro',
+  landscape: false,
+  folded: true,       // foldables start closed, like a phone in your pocket
+  fit: true,
+  rw: 1280,
+  rh: 800,
+  pageZoom: 1         // desktop only: browser zoom level
+};
+
+const save = () => { try { chrome.storage.local.set({ outline: state }); } catch (e) {} };
+
+async function restore() {
+  try {
+    const got = await chrome.storage.local.get('outline');
+    const saved = got && got.outline;
+    if (!saved) return;
+    if (!Array.isArray(saved.urls)) saved.urls = [saved.url || ''];   // v1.0 → v1.2
+    delete saved.url;
+    Object.assign(state, saved);
+    state.urls = state.urls.slice(0, MAX_SITES);
+    if (!state.urls.length) state.urls = [''];
+    state.active = Math.min(Math.max(0, state.active | 0), state.urls.length - 1);
+  } catch (e) {}
+}
+
+/* ── Device spec ──────────────────────────────────── */
+
+const STAND_H = 96;   // desktop stand, drawn below the monitor
+
+function spec() {
+  const d = byId(state.device);
+  if (d.responsive) {
+    return { d, responsive: true, w: state.rw, h: state.rh, screenW: state.rw, screenH: state.rh, boxW: state.rw, boxH: state.rh, frameH: state.rh };
+  }
+  const s = d.states ? d.states[state.folded ? 'closed' : 'open'] : d;
+  const f = s.frame;
+  const bx = f.bezel;
+  const by = f.bezelY == null ? f.bezel : f.bezelY;
+  const FW = s.w + 2 * bx;
+  const FH = s.h + 2 * by;
+  const L = state.landscape && !d.desktop;
+  const frameW = L ? FH : FW;
+  const frameH = L ? FW : FH;
+  return {
+    d, s, f, bx, by, FW, FH, L,
+    w: s.w, h: s.h,
+    screenW: L ? s.h : s.w,
+    screenH: L ? s.w : s.h,
+    frameH,
+    boxW: frameW,
+    boxH: frameH + (f.stand ? STAND_H : 0)
+  };
+}
+
+const displayName = (d) => (d.nameKey ? t(d.nameKey, d.name) : d.name);
+
+/* ── Frame drawing (SVG outline, portrait coordinates) ── */
+
+function frameSVG(p) {
+  const { f, FW, FH, w, h, d, bx, by } = p;
+  const R = f.bodyRadius != null ? f.bodyRadius : f.radius + bx;
+  const parts = [];
+  const line = 'fill="#fff" stroke="#000"';
+
+  // desktop stand, behind the monitor
+  if (f.stand) {
+    const nw = Math.min(180, FW * 0.12), bw = Math.min(420, FW * 0.3);
+    parts.push(`<path d="M ${FW / 2 - nw / 2} ${FH - 2} L ${FW / 2 - nw / 2 - 6} ${FH + STAND_H - 12} L ${FW / 2 + nw / 2 + 6} ${FH + STAND_H - 12} L ${FW / 2 + nw / 2} ${FH - 2} Z" ${line} stroke-width="1.5"/>`);
+    parts.push(`<rect x="${FW / 2 - bw / 2}" y="${FH + STAND_H - 14}" width="${bw}" height="12" rx="6" ${line} stroke-width="1.5"/>`);
+  }
+
+  // buttons first, so the body edge sits on top of them
+  for (const btn of f.buttons || []) {
+    const a = btn.from, z = btn.to;
+    if (btn.side === 'left')  parts.push(`<rect x="-3" y="${a * FH}" width="4" height="${(z - a) * FH}" rx="1.5" ${line} stroke-width="1.2"/>`);
+    if (btn.side === 'right') parts.push(`<rect x="${FW - 1}" y="${a * FH}" width="4" height="${(z - a) * FH}" rx="1.5" ${line} stroke-width="1.2"/>`);
+    if (btn.side === 'top')   parts.push(`<rect x="${a * FW}" y="-3" width="${(z - a) * FW}" height="4" rx="1.5" ${line} stroke-width="1.2"/>`);
+  }
+
+  // body
+  parts.push(`<rect x="0.75" y="0.75" width="${FW - 1.5}" height="${FH - 1.5}" rx="${R}" ${line} stroke-width="1.5"/>`);
+  // screen edge
+  parts.push(`<rect x="${bx}" y="${by}" width="${w}" height="${h}" rx="${f.screenRadius != null ? f.screenRadius : f.radius}" fill="#f4f4f4" stroke="#000" stroke-width="1"/>`);
+
+  // cameras in the bezel
+  if (f.camera === 'short')   parts.push(`<circle cx="${FW / 2}" cy="${by / 2}" r="2.6" fill="none" stroke="#000" stroke-width="1"/>`);
+  if (f.camera === 'long')    parts.push(`<circle cx="${FW - bx / 2}" cy="${FH / 2}" r="2.6" fill="none" stroke="#000" stroke-width="1"/>`);
+  if (f.camera === 'top-dot') parts.push(`<circle cx="${FW / 2}" cy="${by / 2}" r="2.2" fill="#000"/>`);
+
+  // home-button iPhone: earpiece + home button
+  if (f.home) {
+    parts.push(`<rect x="${FW / 2 - 24}" y="${by / 2 - 2.5}" width="48" height="5" rx="2.5" fill="none" stroke="#000" stroke-width="1"/>`);
+    parts.push(`<circle cx="${FW / 2 - 44}" cy="${by / 2}" r="3" fill="none" stroke="#000" stroke-width="1"/>`);
+    parts.push(`<circle cx="${FW / 2}" cy="${FH - by / 2}" r="${by * 0.3}" fill="none" stroke="#000" stroke-width="1.2"/>`);
+  }
+
+  // hinge marks
+  const hinge = (x1, y1, x2, y2) => parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="1.2"/>`);
+  if (d.fold === 'book' && !state.folded) {
+    hinge(FW / 2, 0.75, FW / 2, by * 0.7);
+    hinge(FW / 2, FH - by * 0.7, FW / 2, FH - 0.75);
+  }
+  if (d.fold === 'book' && state.folded) {
+    parts.push(`<path d="M ${bx * 0.45} ${R} V ${FH - R}" stroke="#000" stroke-width="1"/>`);
+  }
+  if (d.fold === 'flip') {
+    hinge(0.75, FH / 2, bx * 0.7, FH / 2);
+    hinge(FW - bx * 0.7, FH / 2, FW - 0.75, FH / 2);
+  }
+
+  return `<svg viewBox="0 0 ${FW} ${FH}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
+}
+
+function cutoutSVG(p) {
+  const { f, FW, FH, w, bx, by } = p;
+  const c = f.cutout;
+  let shape = '';
+  if (c && c.type === 'island') {
+    shape = `<rect x="${bx + w / 2 - c.w / 2}" y="${by + c.top}" width="${c.w}" height="${c.h}" rx="${c.h / 2}" fill="#000"/>`;
+  } else if (c && c.type === 'punch') {
+    shape = `<circle cx="${bx + w * c.x}" cy="${by + c.top + c.d / 2}" r="${c.d / 2}" fill="#000"/>`;
+  } else if (c && c.type === 'notch') {
+    const x0 = bx + w / 2 - c.w / 2, x1 = x0 + c.w, y0 = by, y1 = by + c.h, r = 18, e = 6;
+    shape = `<path d="M ${x0 - e} ${y0} Q ${x0} ${y0} ${x0} ${y0 + e} L ${x0} ${y1 - r} Q ${x0} ${y1} ${x0 + r} ${y1} L ${x1 - r} ${y1} Q ${x1} ${y1} ${x1} ${y1 - r} L ${x1} ${y0 + e} Q ${x1} ${y0} ${x1 + e} ${y0} Z" fill="#000"/>`;
+  }
+  return `<svg viewBox="0 0 ${FW} ${FH}" xmlns="http://www.w3.org/2000/svg">${shape}</svg>`;
+}
+
+/* ── Emulation: UA + headers ──────────────────────── */
+
+const chromeMajor = (navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '142';
+
+function emulation(p) {
+  const d = p.d;
+  if (d.responsive || d.desktop || !d.os) return { hideScrollbar: false };
+  if (d.os === 'ios') {
+    return {
+      os: 'ios', touch: 5, mobile: true, hideScrollbar: true,
+      platform: 'iPhone', vendor: 'Apple Computer, Inc.',
+      ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'
+    };
+  }
+  if (d.os === 'ipados') {
+    // iPadOS Safari presents itself as a Mac by default — that's the real behaviour.
+    return {
+      os: 'ipados', touch: 5, mobile: false, hideScrollbar: true,
+      platform: 'MacIntel', vendor: 'Apple Computer, Inc.',
+      ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15'
+    };
+  }
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) ||
+    [{ brand: 'Chromium', version: chromeMajor }, { brand: 'Google Chrome', version: chromeMajor }];
+  // Android tablets: Chrome drops "Mobile" from the UA, like on a real tablet
+  const mobile = !d.tablet;
+  return {
+    os: 'android', touch: 5, mobile, hideScrollbar: true,
+    platform: 'Linux armv81', vendor: 'Google Inc.', model: d.model, brands,
+    ua: `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 ${mobile ? 'Mobile ' : ''}Safari/537.36`
+  };
+}
+
+let tabId = null;
+const ALL_SUBRESOURCES = ['sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest',
+  'ping', 'csp_report', 'media', 'websocket', 'webtransport', 'webbundle', 'other'];
+
+async function applyRules(emu) {
+  if (tabId === null) {
+    const tab = await chrome.tabs.getCurrent();
+    tabId = tab ? tab.id : -1;
+  }
+  if (tabId < 0) return;
+  const base = (tabId % 100000) * 10;
+  const addRules = [{
+    // Let sites that refuse to be framed (X-Frame-Options / CSP frame-ancestors)
+    // render inside the preview — only in this tab, only for frames.
+    id: base + 1, priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      responseHeaders: [
+        { header: 'x-frame-options', operation: 'remove' },
+        { header: 'content-security-policy', operation: 'remove' }
+      ]
+    },
+    condition: { tabIds: [tabId], resourceTypes: ['sub_frame'] }
+  }];
+  if (emu.ua) {
+    const requestHeaders = [{ header: 'user-agent', operation: 'set', value: emu.ua }];
+    if (emu.os === 'android') {
+      requestHeaders.push(
+        { header: 'sec-ch-ua-mobile', operation: 'set', value: emu.mobile ? '?1' : '?0' },
+        { header: 'sec-ch-ua-platform', operation: 'set', value: '"Android"' }
+      );
+    } else {
+      requestHeaders.push(
+        { header: 'sec-ch-ua', operation: 'remove' },
+        { header: 'sec-ch-ua-mobile', operation: 'remove' },
+        { header: 'sec-ch-ua-platform', operation: 'remove' }
+      );
+    }
+    addRules.push({
+      id: base + 2, priority: 1,
+      action: { type: 'modifyHeaders', requestHeaders },
+      condition: { tabIds: [tabId], resourceTypes: ALL_SUBRESOURCES }
+    });
+  }
+  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [base + 1, base + 2], addRules });
+}
+
+window.addEventListener('pagehide', () => {
+  if (tabId === null || tabId < 0) return;
+  const base = (tabId % 100000) * 10;
+  chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [base + 1, base + 2] }).catch(() => {});
+});
+
+/* ── Loading ──────────────────────────────────────── */
+
+function normalize(raw) {
+  let s = (raw || '').trim();
+  if (!s) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+    return /^(https?|file):\/\//i.test(s) ? s : null;
+  }
+  // a path dragged or pasted from the file manager: C:\... or /Users/...
+  if (/^[a-z]:[\\/]/i.test(s)) return 'file:///' + s.replace(/\\/g, '/');
+  if (/^\/(Users|home|Volumes|mnt|tmp)\//.test(s)) return 'file://' + s;
+  if (/^(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.)/i.test(s)) return 'http://' + s;
+  return 'https://' + s;
+}
+
+
+/* ── Slots (one per compared site) ────────────────── */
+
+const slots = [];
+
+function makeSlot() {
+  const root = el.tpl.content.firstElementChild.cloneNode(true);
+  const q = (c) => root.querySelector(c);
+  const slot = {
+    root, sizer: q('.sizer'), box: q('.device-box'), under: q('.frame-under'), over: q('.frame-over'),
+    screen: q('.screen'), view: q('.view'), empty: q('.empty'), name: q('.slot-name'), x: q('.slot-x'),
+    emuKey: '', src: ''
+  };
+  const index = () => slots.indexOf(slot);
+  root.addEventListener('pointerdown', () => { if (index() !== state.active) setActive(index()); }, true);
+  slot.x.addEventListener('click', (e) => { e.stopPropagation(); removeSite(index()); });
+  root.querySelectorAll('.handle').forEach((h) => wireHandle(h, slot));
+  el.grid.appendChild(root);
+  return slot;
+}
+
+function syncSlots() {
+  while (slots.length < state.urls.length) slots.push(makeSlot());
+  while (slots.length > state.urls.length) slots.pop().root.remove();
+  document.body.classList.toggle('multi', slots.length > 1);
+  el.add.disabled = slots.length >= MAX_SITES;
+}
+
+function setActive(i) {
+  state.active = i;
+  el.url.value = state.urls[i] || '';
+  save();
+  layout();
+}
+
+function addSite() {
+  if (state.urls.length >= MAX_SITES) return;
+  state.urls.push('');
+  state.active = state.urls.length - 1;
+  syncSlots();
+  save();
+  layout();
+  navigate(state.active, true);
+  el.url.value = '';
+  el.url.focus();
+}
+
+function removeSite(i) {
+  if (state.urls.length <= 1) return;
+  state.urls.splice(i, 1);
+  slots.splice(i, 1)[0].root.remove();
+  state.active = Math.min(state.active > i ? state.active - 1 : state.active, state.urls.length - 1);
+  syncSlots();
+  el.url.value = state.urls[state.active] || '';
+  save();
+  layout();
+}
+
+const hostOf = (u) => {
+  try { const x = new URL(u); return x.protocol === 'file:' ? decodeURIComponent(x.pathname.split('/').pop()) : x.host + (x.pathname !== '/' ? x.pathname : ''); }
+  catch (e) { return u; }
+};
+
+/* ── Loading ──────────────────────────────────────── */
+
+async function navigate(i, force) {
+  const slot = slots[i];
+  const url = state.urls[i];
+  if (!slot) return;
+  if (!url) {
+    slot.view.classList.remove('loaded');
+    slot.view.removeAttribute('src');
+    slot.src = '';
+    slot.empty.hidden = false;
+    return;
+  }
+  const emu = emulation(spec());
+  const key = JSON.stringify(emu);
+  if (!force && key === slot.emuKey && slot.src === url) return;
+  slot.emuKey = key;
+  slot.src = url;
+  try { await applyRules(emu); } catch (e) { console.warn('[outline.] rules', e); }
+  // A fresh iframe each time: Chrome only reads the frame name at creation,
+  // and emulate.js reads its settings from that name.
+  const frame = slot.view.cloneNode(false);
+  frame.removeAttribute('src');
+  frame.name = '__outline__' + key;
+  frame.classList.add('loaded');
+  slot.view.replaceWith(frame);
+  slot.view = frame;
+  slot.empty.hidden = true;
+  // Lay the frame out before navigating, so the page never sees a 0×0 window.
+  void frame.offsetWidth;
+  await new Promise(requestAnimationFrame);
+  frame.src = url;
+}
+
+const navigateAll = (force) => Promise.all(slots.map((_, i) => navigate(i, force)));
+
+/* ── Layout ───────────────────────────────────────── */
+
+let frozenScale = null;   // kept still while dragging the responsive handles
+let lastScale = 1;
+let lastCols = 1;
+
+function drawSlot(slot, p, z) {
+  const responsive = !!p.responsive;
+  if (responsive) {
+    slot.under.innerHTML = '';
+    slot.over.innerHTML = '';
+  } else {
+    for (const node of [slot.under, slot.over]) {
+      node.style.width = p.FW + 'px';
+      node.style.height = p.FH + 'px';
+      node.style.left = (p.boxW - p.FW) / 2 + 'px';
+      node.style.top = (p.frameH - p.FH) / 2 + 'px';
+      node.style.transform = p.L ? 'rotate(-90deg)' : 'none';
+    }
+    slot.under.innerHTML = frameSVG(p);
+    slot.over.innerHTML = cutoutSVG(p);
+  }
+  slot.box.style.width = p.boxW + 'px';
+  slot.box.style.height = p.boxH + 'px';
+  const sc = slot.screen.style;
+  sc.width = p.screenW + 'px';
+  sc.height = p.screenH + 'px';
+  sc.left = (p.boxW - p.screenW) / 2 + 'px';
+  sc.top = (p.frameH - p.screenH) / 2 + 'px';
+  sc.boxShadow = responsive ? '' : '0 0 0 1px #000';
+  sc.borderRadius = responsive ? '0' : (p.f.screenRadius != null ? p.f.screenRadius : p.f.radius) + 'px';
+
+  // desktop page zoom: the page lays out at screen ÷ zoom CSS px, then is scaled up
+  const v = slot.view.style;
+  if (z !== 1) {
+    v.width = p.screenW / z + 'px';
+    v.height = p.screenH / z + 'px';
+    v.transform = `scale(${z})`;
+    v.transformOrigin = '0 0';
+  } else {
+    v.width = v.height = v.transform = '';
+  }
+}
+
+function layout() {
+  const p = spec();
+  const responsive = !!p.responsive;
+  const n = slots.length;
+  const z = p.d.desktop ? state.pageZoom : 1;
+  document.body.classList.toggle('responsive', responsive);
+
+  for (const slot of slots) drawSlot(slot, p, z);
+
+  // pick the grid (1–3 rows) that shows the devices biggest
+  const GAP_X = 40, GAP_Y = 36, CAP = n > 1 ? 34 : 0;
+  const pad = responsive ? 24 : 10;
+  const availW = el.stage.clientWidth - 48;
+  const availH = el.stage.clientHeight - 28 - 16 - 48;
+  let scale = 1, cols = n;
+  if (frozenScale !== null) {
+    scale = frozenScale;
+    cols = lastCols;
+  } else {
+    let best = -1;
+    for (let rows = 1; rows <= Math.min(3, n); rows++) {
+      const c = Math.ceil(n / rows);
+      const r = Math.ceil(n / c);
+      const s = Math.min(
+        (availW - GAP_X * (c - 1)) / (c * (p.boxW + pad)),
+        (availH - GAP_Y * (r - 1) - CAP * r) / (r * (p.boxH + pad))
+      );
+      if (s > best + 0.001) { best = s; cols = c; }
+    }
+    scale = state.fit ? Math.max(0.08, Math.min(1, best)) : 1;
+  }
+  lastScale = scale;
+  lastCols = cols;
+  el.grid.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+
+  slots.forEach((slot, i) => {
+    slot.box.style.transform = `scale(${scale})`;
+    slot.sizer.style.width = p.boxW * scale + 'px';
+    slot.sizer.style.height = p.boxH * scale + 'px';
+    slot.root.classList.toggle('active', n > 1 && i === state.active);
+    // with several sites, only the last one in the first row gets the drag handles
+    slot.root.classList.toggle('resizable', i === Math.min(cols, n) - 1);
+    const u = state.urls[i];
+    slot.name.textContent = `${i + 1} · ${u ? hostOf(u) : t('emptySlot', 'empty')}`;
+    slot.name.title = u || '';
+    slot.x.hidden = n < 2;
+  });
+
+  // toolbar state
+  el.slotNo.hidden = n < 2;
+  el.slotNo.textContent = state.active + 1;
+  el.dims.hidden = !responsive;
+  if (document.activeElement !== el.rw) el.rw.value = state.rw;
+  if (document.activeElement !== el.rh) el.rh.value = state.rh;
+  el.fold.hidden = !(p.d.states);
+  el.fold.classList.toggle('on', !!p.d.states && !state.folded);
+  el.rotate.hidden = !!p.d.desktop;
+  el.rotate.classList.toggle('on', !!p.L);
+  el.pzWrap.hidden = !p.d.desktop;
+  el.pz.value = String(state.pageZoom);
+  el.zoom.textContent = state.fit ? t('fit', 'Fit') : '100%';
+
+  // caption
+  const approx = p.d.approx ? '≈ ' : '';
+  const foldState = p.d.states ? ` <span class="m">· ${state.folded ? t('closed', 'closed') : t('opened', 'open')}</span>` : '';
+  const name = responsive ? t('responsive', 'Responsive') : displayName(p.d);
+  const zoomInfo = z !== 1
+    ? ` <span class="m">· zoom ${Math.round(z * 100)}% →</span> ${Math.round(p.screenW / z)} × ${Math.round(p.screenH / z)} <span class="m">CSS</span>`
+    : '';
+  el.caption.innerHTML = `${name}${foldState} <span class="m">—</span> ${approx}${p.screenW} × ${p.screenH}${zoomInfo} <span class="m">· ${Math.round(scale * 100)}%</span>`;
+  el.caption.title = p.d.approx ? t('approxHint', 'Approximate: derived from resolution ÷ pixel ratio') : '';
+}
+
+/* ── Controls ─────────────────────────────────────── */
+
+function buildSelect() {
+  const groups = {};
+  const opt = (d) => {
+    const o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = d.responsive ? t('responsive', 'Responsive') : displayName(d);
+    return o;
+  };
+  el.device.appendChild(opt(RESPONSIVE));
+  for (const d of DEVICES) {
+    const g = d.group || d.brand;
+    if (!groups[g]) {
+      groups[g] = document.createElement('optgroup');
+      groups[g].label = g;
+      el.device.appendChild(groups[g]);
+    }
+    groups[g].appendChild(opt(d));
+  }
+  for (const z of PAGE_ZOOMS) {
+    const o = document.createElement('option');
+    o.value = String(z);
+    o.textContent = `${Math.round(z * 100)}%`;
+    el.pz.appendChild(o);
+  }
+}
+
+el.form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const url = normalize(el.url.value);
+  if (!url) { el.url.focus(); el.url.select(); return; }
+  state.urls[state.active] = url;
+  el.url.value = url;
+  save();
+  layout();
+  navigate(state.active, true);
+  el.url.blur();
+});
+
+// pasting a link loads it straight away
+el.url.addEventListener('paste', () => setTimeout(() => {
+  if (normalize(el.url.value)) el.form.requestSubmit();
+}, 0));
+
+el.add.addEventListener('click', addSite);
+
+el.device.addEventListener('change', () => {
+  state.device = el.device.value;
+  save();
+  layout();
+  navigateAll(false);
+});
+
+el.pz.addEventListener('change', () => {
+  state.pageZoom = parseFloat(el.pz.value) || 1;
+  save();
+  layout();
+});
+
+el.rotate.addEventListener('click', () => {
+  const d = byId(state.device);
+  if (d.desktop) return;
+  if (d.responsive) [state.rw, state.rh] = [state.rh, state.rw];
+  else state.landscape = !state.landscape;
+  save();
+  layout();
+});
+
+el.fold.addEventListener('click', () => {
+  state.folded = !state.folded;
+  save();
+  layout();
+});
+
+el.reload.addEventListener('click', () => navigateAll(true));
+
+el.zoom.addEventListener('click', () => {
+  state.fit = !state.fit;
+  save();
+  layout();
+});
+
+el.open.addEventListener('click', () => {
+  const u = state.urls[state.active];
+  if (u) window.open(u, '_blank', 'noopener');
+});
+
+const clampDim = (v) => Math.max(200, Math.min(3840, Math.round(+v || 0)));
+for (const [input, key] of [[el.rw, 'rw'], [el.rh, 'rh']]) {
+  input.addEventListener('change', () => { state[key] = clampDim(input.value); save(); layout(); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+}
+
+// responsive drag handles: the box being dragged stays pinned under the
+// pointer (the grid is nudged to compensate for re-centring), then settles.
+function wireHandle(h, slot) {
+  h.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    h.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY, w: state.rw, h: state.rh };
+    const r0 = slot.box.getBoundingClientRect();
+    let tx = 0, ty = 0;
+    const dir = h.dataset.dir;
+    frozenScale = lastScale;
+    document.body.classList.add('dragging');
+    const move = (ev) => {
+      if (dir.includes('x')) state.rw = clampDim(start.w + (ev.clientX - start.x) / frozenScale);
+      if (dir.includes('y')) state.rh = clampDim(start.h + (ev.clientY - start.y) / frozenScale);
+      layout();
+      const r = slot.box.getBoundingClientRect();
+      tx += r0.left - r.left;
+      ty += r0.top - r.top;
+      el.grid.style.translate = `${tx}px ${ty}px`;
+    };
+    const up = () => {
+      h.removeEventListener('pointermove', move);
+      h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      document.body.classList.remove('dragging');
+      el.grid.style.translate = '';
+      frozenScale = null;
+      save();
+      layout();
+    };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+    h.addEventListener('pointercancel', up);
+  });
+}
+
+// keyboard: R rotate · F fold · Z zoom · L link · N new site · 1–5 pick site · + − 0 page zoom
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') el.rotate.click();
+  else if (k === 'f' && !el.fold.hidden) el.fold.click();
+  else if (k === 'z') el.zoom.click();
+  else if (k === 'n') { e.preventDefault(); addSite(); }
+  else if (k === 'l') { e.preventDefault(); el.url.focus(); el.url.select(); }
+  else if (/^[1-5]$/.test(k) && +k <= slots.length) setActive(+k - 1);
+  else if ((k === '+' || k === '=' || k === '-' || k === '0') && byId(state.device).desktop) {
+    const i = PAGE_ZOOMS.indexOf(state.pageZoom);
+    if (k === '0') state.pageZoom = 1;
+    else state.pageZoom = PAGE_ZOOMS[Math.max(0, Math.min(PAGE_ZOOMS.length - 1, (i < 0 ? 5 : i) + (k === '-' ? -1 : 1)))];
+    save();
+    layout();
+  }
+});
+
+new ResizeObserver(() => { if (frozenScale === null) layout(); }).observe(el.stage);
+
+/* ── Boot ─────────────────────────────────────────── */
+
+(async function boot() {
+  buildSelect();
+  await restore();
+  const fromParam = normalize(new URLSearchParams(location.search).get('url'));
+  if (fromParam) {
+    state.urls[state.active] = fromParam;
+    history.replaceState(null, '', location.pathname);
+  }
+  if (!ALL.some((d) => d.id === state.device)) state.device = DEVICES[0].id;
+  el.device.value = state.device;
+  el.url.value = state.urls[state.active] || '';
+  syncSlots();
+  save();
+  layout();
+  navigateAll(true);
+  if (!state.urls[state.active]) el.url.focus();
+})();
