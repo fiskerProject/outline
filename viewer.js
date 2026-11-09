@@ -30,7 +30,8 @@ translate(el.tpl.content);
 
 const MAX_SITES = 5;
 const ALL = [RESPONSIVE, ...DEVICES];
-const byId = (id) => ALL.find((d) => d.id === id) || DEVICES[0];
+const DEFAULT_DEVICE = 'iphone-18-pro';
+const byId = (id) => ALL.find((d) => d.id === id) || ALL.find((d) => d.id === DEFAULT_DEVICE);
 
 const state = {
   urls: [''],         // up to 5 sites, compared side by side on the same device
@@ -44,19 +45,26 @@ const state = {
   pageZoom: 1         // desktop only: browser zoom level
 };
 
+const clampDim = (v) => Math.max(200, Math.min(3840, Math.round(+v || 0) || 200));
+
 const save = () => { try { chrome.storage.local.set({ outline: state }); } catch (e) {} };
 
 async function restore() {
   try {
     const got = await chrome.storage.local.get('outline');
     const saved = got && got.outline;
-    if (!saved) return;
-    if (!Array.isArray(saved.urls)) saved.urls = [saved.url || ''];   // v1.0 → v1.2
-    delete saved.url;
-    Object.assign(state, saved);
-    state.urls = state.urls.slice(0, MAX_SITES);
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+    // older versions stored a single `url`
+    const urls = Array.isArray(saved.urls) ? saved.urls : [saved.url];
+    state.urls = urls.map((u) => (typeof u === 'string' ? normalize(u) || '' : '')).slice(0, MAX_SITES);
     if (!state.urls.length) state.urls = [''];
-    state.active = Math.min(Math.max(0, state.active | 0), state.urls.length - 1);
+    const idx = Number.isInteger(saved.active) ? saved.active : 0;
+    state.active = Math.min(Math.max(0, idx), state.urls.length - 1);
+    if (typeof saved.device === 'string' && ALL.some((d) => d.id === saved.device)) state.device = saved.device;
+    for (const k of ['landscape', 'folded', 'fit']) if (typeof saved[k] === 'boolean') state[k] = saved[k];
+    for (const k of ['rw', 'rh']) if (Number.isFinite(+saved[k]) && +saved[k] > 0) state[k] = clampDim(saved[k]);
+    const z = +saved.pageZoom;
+    if (PAGE_ZOOMS.includes(z)) state.pageZoom = z;
   } catch (e) {}
 }
 
@@ -252,15 +260,16 @@ window.addEventListener('pagehide', () => {
 /* ── Loading ──────────────────────────────────────── */
 
 function normalize(raw) {
-  let s = (raw || '').trim();
+  const s = String(raw == null ? '' : raw).trim();
   if (!s) return null;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
-    return /^(https?|file):\/\//i.test(s) ? s : null;
-  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return /^(https?|file):\/\//i.test(s) ? s : null;
   // a path dragged or pasted from the file manager: C:\... or /Users/...
   if (/^[a-z]:[\\/]/i.test(s)) return 'file:///' + s.replace(/\\/g, '/');
   if (/^\/(Users|home|Volumes|mnt|tmp)\//.test(s)) return 'file://' + s;
+  // anything else must look like a host: no spaces, no other scheme (javascript:, data:, mailto:…)
+  if (/\s/.test(s) || /^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s)) return null;
   if (/^(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.)/i.test(s)) return 'http://' + s;
+  if (!/^[^/?#]+\.[^/?#]+/.test(s)) return null;
   return 'https://' + s;
 }
 
@@ -278,7 +287,10 @@ function makeSlot() {
     emuKey: '', src: ''
   };
   const index = () => slots.indexOf(slot);
-  root.addEventListener('pointerdown', () => { if (index() !== state.active) setActive(index()); }, true);
+  root.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.slot-x')) return;   // removing a slot shouldn't select it first
+    if (index() !== state.active) setActive(index());
+  }, true);
   slot.x.addEventListener('click', (e) => { e.stopPropagation(); removeSite(index()); });
   root.querySelectorAll('.handle').forEach((h) => wireHandle(h, slot));
   el.grid.appendChild(root);
@@ -411,7 +423,7 @@ function layout() {
   const p = spec();
   const responsive = !!p.responsive;
   const n = slots.length;
-  const z = p.d.desktop ? state.pageZoom : 1;
+  const z = p.d.desktop && state.pageZoom > 0 ? state.pageZoom : 1;
   document.body.classList.toggle('responsive', responsive);
 
   for (const slot of slots) drawSlot(slot, p, z);
@@ -444,6 +456,7 @@ function layout() {
 
   slots.forEach((slot, i) => {
     slot.box.style.transform = `scale(${scale})`;
+    slot.screen.style.outline = responsive ? `${1.5 / scale}px solid #000` : '';
     slot.sizer.style.width = p.boxW * scale + 'px';
     slot.sizer.style.height = p.boxH * scale + 'px';
     slot.root.classList.toggle('active', n > 1 && i === state.active);
@@ -568,7 +581,6 @@ el.open.addEventListener('click', () => {
   if (u) window.open(u, '_blank', 'noopener');
 });
 
-const clampDim = (v) => Math.max(200, Math.min(3840, Math.round(+v || 0)));
 for (const [input, key] of [[el.rw, 'rw'], [el.rh, 'rh']]) {
   input.addEventListener('change', () => { state[key] = clampDim(input.value); save(); layout(); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
@@ -633,6 +645,15 @@ document.addEventListener('keydown', (e) => {
 
 new ResizeObserver(() => { if (frozenScale === null) layout(); }).observe(el.stage);
 
+// Clicking inside a preview never reaches this page (it's another site), but the
+// iframe takes focus — so follow the focused frame to pick the active site.
+setInterval(() => {
+  const a = document.activeElement;
+  if (!a || a.tagName !== 'IFRAME') return;
+  const i = slots.findIndex((s) => s.view === a);
+  if (i >= 0 && i !== state.active) setActive(i);
+}, 250);
+
 /* ── Boot ─────────────────────────────────────────── */
 
 (async function boot() {
@@ -643,7 +664,7 @@ new ResizeObserver(() => { if (frozenScale === null) layout(); }).observe(el.sta
     state.urls[state.active] = fromParam;
     history.replaceState(null, '', location.pathname);
   }
-  if (!ALL.some((d) => d.id === state.device)) state.device = DEVICES[0].id;
+  if (!ALL.some((d) => d.id === state.device)) state.device = DEFAULT_DEVICE;
   el.device.value = state.device;
   el.url.value = state.urls[state.active] || '';
   syncSlots();

@@ -261,7 +261,7 @@ body.dragging .shield { display: block; }
 body.dragging { cursor: grabbing; user-select: none; }
 
 /* responsive mode: just a black border */
-body.responsive .screen { outline: 1.5px solid var(--ink); background: var(--paper); }
+body.responsive .screen { background: var(--paper); }
 
 .handle { position: absolute; display: none; z-index: 3; }
 body.responsive .slot.resizable .handle { display: block; }
@@ -339,6 +339,7 @@ body.multi.responsive .slot-cap { margin-top: 10px; }
 
 .credits {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: baseline;
   gap: 6px;
