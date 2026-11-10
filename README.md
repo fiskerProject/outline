@@ -13,6 +13,9 @@ Paste a link and the site renders inside a minimal black-and-white outline of th
   <img src="docs/screenshot.png" width="860" alt="outline. showing a website on iPhone 18 Pro">
 </p>
 
+<p align="center">▶ <b>Teaser</b> — <a href="docs/outline-teaser-16x9-1080p.mp4">16:9</a> · <a href="docs/outline-teaser-9x16-1080p.mp4">9:16</a><br>
+<sub>Sites shown in the teaser are Awwwards Sites of the Day, used only as examples: Mecha, Creative Reference Library, DeepBook, Grids (Obys).</sub></p>
+
 ## Features
 
 - **55 presets.**

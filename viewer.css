@@ -177,7 +177,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   display: flex;
   flex-direction: column;
   align-items: safe center;
-  padding: 28px 24px 16px;
+  padding: 28px 56px 16px; /* room for the save button at -40px */
   min-height: 0;
 }
 
