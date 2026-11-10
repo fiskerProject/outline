@@ -63,12 +63,42 @@
     "message": "Page zoom (+ / − / 0)"
   },
   "addSite": {
-    "message": "Add a site to compare (max 5) — N"
+    "message": "Add a site to compare (max 6) — N"
   },
   "removeSite": {
     "message": "Remove this site"
   },
   "emptySlot": {
     "message": "empty"
+  },
+  "saveLink": {
+    "message": "Save this link (S)"
+  },
+  "unsaveLink": {
+    "message": "Remove from saved links"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "savedLinks": {
+    "message": "Saved links"
+  },
+  "openAll": {
+    "message": "Open all in compare"
+  },
+  "favsEmpty": {
+    "message": "No saved links yet. Click the bookmark next to a device to save its site."
+  },
+  "openHere": {
+    "message": "Open here"
+  },
+  "addToCompare": {
+    "message": "Add to compare"
+  },
+  "deleteSaved": {
+    "message": "Delete from saved links"
+  },
+  "close": {
+    "message": "Close"
   }
 }
