@@ -40,7 +40,7 @@ MORE THAN JUST A NARROW WINDOW
 PRIVATE BY DESIGN
 No tracking, no accounts, no servers. Network changes apply only inside the viewer tab and disappear when you close it.
 
-Open source (MIT).
+Source-available, non-commercial (PolyForm Noncommercial 1.0.0). Commercial license: studio@acadesign.eu
 ```
 
 **Description (IT)** *(add it under "Localized listing → Italiano" if you want an Italian page)*:
@@ -67,7 +67,7 @@ NON SOLO UNA FINESTRA STRETTA
 PRIVACY
 Nessun tracciamento, nessun account, nessun server. Le modifiche di rete valgono solo nella scheda dell'anteprima e spariscono quando la chiudi.
 
-Open source (MIT).
+Source-available, non-commercial (PolyForm Noncommercial 1.0.0). Commercial license: studio@acadesign.eu
 ```
 
 ## Images
