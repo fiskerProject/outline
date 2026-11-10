@@ -7,14 +7,15 @@
 <p align="center"><b>See any website on the latest phones, tablets and foldables, right inside Chrome.</b><br>
 Paste a link and the site renders inside a minimal black-and-white outline of the device, at its real CSS viewport.</p>
 
+https://github.com/user-attachments/assets/b590020b-706e-4bba-bcaa-a20a4dc9bd07
+
+<p align="center"><sub>Sites shown in the teaser: a mock ACA Design page, and Awwwards Sites of the Day used only as examples (Grids by Obys, Mecha).</sub></p>
+
 <p align="center"><sub><b>Source-available · non-commercial</b> (PolyForm Noncommercial 1.0.0) — for commercial use contact <a href="mailto:studio@acadesign.eu">ACA Design</a></sub></p>
 
 <p align="center">
   <img src="docs/screenshot.png" width="860" alt="outline. showing a website on iPhone 18 Pro">
 </p>
-
-<p align="center">▶ <b>Teaser</b> — <a href="docs/outline-teaser-16x9-1080p.mp4">16:9</a> · <a href="docs/outline-teaser-9x16-1080p.mp4">9:16</a><br>
-<sub>Sites shown in the teaser are Awwwards Sites of the Day, used only as examples: Mecha, Creative Reference Library, DeepBook, Grids (Obys).</sub></p>
 
 ## Features
 
