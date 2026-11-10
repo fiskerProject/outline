@@ -63,12 +63,42 @@
     "message": "Zoom della pagina (+ / − / 0)"
   },
   "addSite": {
-    "message": "Aggiungi un sito da confrontare (max 5) — N"
+    "message": "Aggiungi un sito da confrontare (max 6) — N"
   },
   "removeSite": {
     "message": "Togli questo sito"
   },
   "emptySlot": {
     "message": "vuoto"
+  },
+  "saveLink": {
+    "message": "Salva questo link (S)"
+  },
+  "unsaveLink": {
+    "message": "Togli dai link salvati"
+  },
+  "saved": {
+    "message": "Salvati"
+  },
+  "savedLinks": {
+    "message": "Link salvati"
+  },
+  "openAll": {
+    "message": "Apri tutti nel confronto"
+  },
+  "favsEmpty": {
+    "message": "Nessun link salvato. Clicca il segnalibro accanto a un dispositivo per salvare il suo sito."
+  },
+  "openHere": {
+    "message": "Apri qui"
+  },
+  "addToCompare": {
+    "message": "Aggiungi al confronto"
+  },
+  "deleteSaved": {
+    "message": "Elimina dai link salvati"
+  },
+  "close": {
+    "message": "Chiudi"
   }
 }
