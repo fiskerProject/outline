@@ -7,6 +7,8 @@
 <p align="center"><b>See any website on the latest phones, tablets and foldables, right inside Chrome.</b><br>
 Paste a link and the site renders inside a minimal black-and-white outline of the device, at its real CSS viewport.</p>
 
+<p align="center"><sub><b>Source-available · non-commercial</b> (PolyForm Noncommercial 1.0.0) — for commercial use contact <a href="mailto:studio@acadesign.eu">ACA Design</a></sub></p>
+
 <p align="center">
   <img src="docs/screenshot.png" width="860" alt="outline. showing a website on iPhone 18 Pro">
 </p>
@@ -42,18 +44,27 @@ Paste a link and the site renders inside a minimal black-and-white outline of th
 |---|---|---|
 | ![](store/screenshot-2-foldable.png) | ![](store/screenshot-3-ipad.png) | ![](store/screenshot-4-responsive.png) |
 
-## Install
+## Install in Chrome (step by step)
 
-**Chrome Web Store:** *coming soon*
+outline. isn't on the Chrome Web Store: you install it from this repository in about a minute. It works in Chrome, Edge, Brave, Arc and other Chromium browsers.
 
-**From source:**
+1. **Download the code.** At the top of this page click the green **Code** button → **Download ZIP**.
+2. **Unzip it** into a folder you'll keep, for example `Documents/outline`. Chrome loads the extension from that folder every time, so don't delete it and don't leave it in Downloads.
+   Open the folder: you must see `manifest.json` directly inside. If you only see another folder (e.g. `outline-main`), that inner folder is the one to use.
+3. **Open the extensions page.** Type `chrome://extensions` in the address bar and press Enter.
+4. **Turn on Developer mode** with the switch in the top-right corner.
+5. **Click "Load unpacked"** (top left) and select the folder from step 2 — the one that contains `manifest.json`.
+6. **Pin it.** Click the puzzle icon 🧩 in the toolbar and pin **outline.** so the fox icon is always visible.
+7. *(Optional, for local `.html` files)* On the outline. card click **Details** and turn on **Allow access to file URLs**.
 
-1. Download this repository (`Code → Download ZIP`) and unzip it, or `git clone` it
-2. Open `chrome://extensions` and turn on **Developer mode**
-3. Click **Load unpacked** and select the folder
-4. *(For local `.html` files)* open the extension's **Details** and enable **Allow access to file URLs**
+Done: click the fox (or press `Alt+Shift+O`). The viewer opens with the page you were on.
 
-Click the icon (or press `Alt+Shift+O`). The viewer opens with the page you were on already loaded.
+**Update to a new version:** download the ZIP again, replace the files in the same folder, then on `chrome://extensions` click **↻** on the outline. card and reopen the viewer tab.
+
+**Troubleshooting**
+- *"Manifest file is missing or unreadable"* → you selected the outer folder: choose the one with `manifest.json` inside.
+- *Blank page after an update* → click **↻** on `chrome://extensions`, then close and reopen the outline. tab.
+- Chrome may show a "developer mode extensions" notice at startup: that's normal for extensions installed this way.
 
 ## Shortcuts
 
@@ -133,10 +144,30 @@ GitHub Actions builds `outline-v1.0.1.zip` and attaches it to a Release, ready f
 
 ## License
 
-MIT © 2026 Tommaso Chiusi, Luca Artesani — [acadesign.eu](https://acadesign.eu)
+**Source-available, non-commercial.** outline. is released under the [PolyForm Noncommercial License 1.0.0](LICENSE): you can read, use, modify and share the code for personal, educational, research and other **non-commercial** purposes.
+
+**Commercial use is not allowed** — this includes selling it, bundling it in a paid product or service, or using it inside a company for commercial work.
+For a commercial license, contact **ACA Design** — [studio@acadesign.eu](mailto:studio@acadesign.eu) · [acadesign.eu](https://acadesign.eu)
+
+© 2026 Tommaso Chiusi, Luca Artesani — ACA Design
 
 ---
 
-### 🇮🇹 In breve
+### 🇮🇹 In italiano
 
-**outline.** è un'estensione Chrome open source: incolli un link e vedi il sito dentro il contorno dell'iPhone, iPad, Galaxy, Pixel o pieghevole più recente, oppure in modalità responsive ridimensionabile. Funziona anche con i file HTML locali. Installazione: `chrome://extensions` → Modalità sviluppatore → *Carica estensione non pacchettizzata*.
+**outline.** è un'estensione Chrome con codice aperto, **solo per uso non commerciale** (licenza PolyForm Noncommercial 1.0.0). Per l'uso commerciale contattate ACA Design — [studio@acadesign.eu](mailto:studio@acadesign.eu).
+
+Incolli un link e vedi il sito dentro il contorno dell'iPhone, iPad, Galaxy, Pixel, pieghevole o desktop, oppure in modalità responsive ridimensionabile. Confronti fino a 6 siti, salvi i link preferiti, funziona anche con i file HTML locali.
+
+**Come installarla su Chrome**
+1. In alto in questa pagina clicca il pulsante verde **Code** → **Download ZIP**.
+2. Estrai lo zip in una cartella che tieni, per esempio `Documenti\outline` (non in Download: Chrome la legge da lì ogni volta). Dentro la cartella devi vedere direttamente `manifest.json`; se vedi un'altra cartella (es. `outline-main`), usa quella interna.
+3. Scrivi `chrome://extensions` nella barra degli indirizzi e premi Invio.
+4. Attiva **Modalità sviluppatore** in alto a destra.
+5. Clicca **Carica estensione non pacchettizzata** e scegli la cartella con `manifest.json`.
+6. Clicca l'icona del puzzle 🧩 e fissa **outline.**: comparirà la volpe nella barra.
+7. *(Facoltativo, per i file `.html` sul PC)* sulla card di outline. clicca **Dettagli** e attiva **Consenti l'accesso agli URL dei file**.
+
+Fatto: clicca la volpe (o premi `Alt+Shift+O`).
+
+**Per aggiornarla:** riscarica lo ZIP, sostituisci i file nella stessa cartella, poi su `chrome://extensions` clicca **↻** sulla card di outline. e riapri la scheda.
