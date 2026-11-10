@@ -100,5 +100,8 @@
   },
   "close": {
     "message": "Chiudi"
+  },
+  "nonCommercial": {
+    "message": "uso non commerciale"
   }
 }
