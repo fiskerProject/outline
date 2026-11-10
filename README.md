@@ -20,7 +20,9 @@ Paste a link and the site renders inside a minimal black-and-white outline of th
   - **Google:** Pixel 11 / 11 Pro / 11 Pro XL / 11 Pro Fold
   - **Desktop:** large (1920 × 1080), medium (1440 × 900), small (1366 × 768)
 - **Desktop page zoom** (50 – 200 %, or `+` `−` `0`), to check layouts at the browser zoom or Windows scaling people actually use. 1920 × 1080 at 125 % lays out like a 1536 × 864 viewport.
-- **Compare up to 5 sites** side by side on the same device (`+` next to the link, or `N`). Click a preview to edit its link, `×` to remove it, `1`–`5` to switch.
+- **Compare up to 6 sites** on the same device. Add one with `+` (or `N`); pick it with its numbered chip next to the link field (or `1`–`6`); `×` removes it. Phones line up side by side; desktops go 2 wide, then 3 × 2.
+- **Saved links.** `☆` in the link field (or `S`) saves the open site; **Saved** lists them: open one, add it to the comparison, or open them all at once. Synced across your Chrome profile, no account or database needed.
+- **Always fits the window.** Devices use all the vertical space and never spill off-screen. A single desktop is shown no wider than the small desktop preset.
 - **Foldables.** Open and close them (`F`) to switch between cover and inner screen.
 - **Rotate** to landscape (`R`). The page keeps its state, like on a real phone.
 - **Responsive mode.** A plain black border you can resize by dragging or by typing exact sizes.
@@ -59,8 +61,9 @@ Click the icon (or press `Alt+Shift+O`). The viewer opens with the page you were
 |---|---|
 | `Alt+Shift+O` | Open outline. |
 | `L` | Focus the link field |
-| `N` | Add a site to compare (max 5) |
-| `1`–`5` | Pick which site the link field edits |
+| `N` | Add a site to compare (max 6) |
+| `1`–`6` | Pick which site the link field edits |
+| `S` | Save / unsave the open link |
 | `R` | Rotate |
 | `F` | Fold / unfold |
 | `Z` | Fit / 100% |
@@ -72,10 +75,27 @@ Click the icon (or press `Alt+Shift+O`). The viewer opens with the page you were
 |---|---|
 | `viewer.html / .css / .js` | The page: toolbar, device outlines (inline SVG), scaling, responsive handles |
 | `devices.js` | Device catalogue: viewport sizes and frame geometry |
-| `background.js` | Opens the viewer and cleans up rules when the tab closes |
+| `background.js` | Opens the viewer, creates the per-tab network rules on request, and removes them when the viewer goes away |
 | `emulate.js` | Runs only inside the preview frame and emulates UA, platform, touch and scrollbars |
 
-Header changes use `declarativeNetRequest` **session rules scoped to the viewer tab's ID**. Your normal browsing is never touched, and the rules are removed when the viewer closes or navigates away.
+Header changes use `declarativeNetRequest` **session rules scoped to the viewer tab's ID**. Your normal browsing is never touched, and the rules are removed when the viewer closes, reloads or navigates away (and on every extension start, if a tab crashed).
+
+## Permissions
+
+| Permission | Why |
+|---|---|
+| `declarativeNetRequest` | Inside the viewer tab only: sets the device `User-Agent` / client hints, removes `X-Frame-Options`, and removes `Content-Security-Policy` only when it contains `frame-ancestors`. |
+| `storage` | Remembers your last links and device (`storage.local`), syncs your saved links (`storage.sync`), and tracks which viewer tab owns which rule (`storage.session`). |
+| `activeTab` | Reads the address of the current tab when you click the icon, to prefill the viewer. |
+| Host access (`<all_urls>`) | Needed to modify headers for, and run the emulation script in, whatever site you preview (including `localhost` and local files). |
+
+## Security
+
+- Strict Content Security Policy for the extension's pages: only its own scripts, no `eval`, no network requests of its own, no plugins, and the viewer can't be framed by anyone. Frames may only load `http`, `https` and `file` pages (plus `blob:` / `data:` a site opens inside its own frame).
+- No `web_accessible_resources`: websites can't load or probe any file of the extension.
+- Preview frames are sandboxed (no top-level navigation, so a site can't take over the viewer) and send no referrer.
+- Every link from the address field, `?url=`, local storage or synced saved links is checked: only `http`, `https` and `file` links, max 8192 characters, max 100 saved links. Untrusted text is never inserted as HTML.
+- Network rules are created by the service worker for the requesting viewer tab only; the tab ID comes from Chrome, not from the page.
 
 ## Notes and limits
 
@@ -86,7 +106,7 @@ Header changes use `declarativeNetRequest` **session rules scoped to the viewer 
 
 ## Privacy
 
-No data is collected. See [PRIVACY.md](PRIVACY.md).
+No data is collected and nothing is sent to the developers. Your last links and device stay in `chrome.storage.local` on your computer; saved links live in `chrome.storage.sync`, which Chrome syncs to your Google account only if Chrome Sync is on. See [PRIVACY.md](PRIVACY.md).
 
 ## Add a device
 

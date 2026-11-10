@@ -5,20 +5,23 @@
   <title>outline.</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="icons/icon32.png" sizes="32x32">
-  <link rel="stylesheet" href="viewer.css?v=1.2.2">
+  <link rel="stylesheet" href="viewer.css?v=1.4.1">
 </head>
 <body>
   <header class="bar">
     <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>outline.</span></div>
 
+    <div id="chips" class="chips" hidden></div>
     <form id="urlForm" class="url" autocomplete="off">
-      <span id="slotNo" class="slot-no" hidden>1</span>
       <input id="url" type="text" spellcheck="false" data-i18n-placeholder="placeholder" placeholder="Paste a link">
       <button type="submit" class="go" data-i18n-title="go" title="Go" aria-label="Go">
         <svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
       </button>
     </form>
-    <button id="add" class="icon add" data-i18n-title="addSite" title="Add a site to compare (max 5)">
+    <button id="favsBtn" class="text favs-btn" type="button" aria-controls="drawer" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span data-i18n="saved">Saved</span><span id="favsCount" class="count"></span>
+    </button>
+    <button id="add" class="icon add" data-i18n-title="addSite" title="Add a site to compare (max 6)">
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
 
@@ -69,14 +72,28 @@
     <span><a href="https://github.com/fiskerProject/outline" target="_blank" rel="noopener">open source</a>, MIT</span>
   </footer>
 
+  <aside id="drawer" class="drawer" aria-hidden="true" aria-labelledby="drawerTitle">
+    <header class="drawer-head">
+      <h2 id="drawerTitle" data-i18n="savedLinks">Saved links</h2>
+      <button type="button" id="drawerClose" class="drawer-close" data-i18n-title="close" title="Close">×</button>
+    </header>
+    <div id="drawerList" class="drawer-list"></div>
+    <footer class="drawer-foot">
+      <button type="button" id="openAll" class="drawer-all" data-i18n="openAll">Open all in compare</button>
+    </footer>
+  </aside>
+
   <template id="slotTpl">
     <div class="slot">
       <div class="sizer">
+        <button type="button" class="slot-save" data-i18n-title="saveLink" title="Save this link">
+          <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        </button>
         <div class="device-box">
           <div class="frame frame-under"></div>
           <div class="screen">
             <p class="empty" data-i18n="emptyHint">Paste a link above</p>
-            <iframe class="view" title="Preview" referrerpolicy="no-referrer-when-downgrade"
+            <iframe class="view" title="Preview" referrerpolicy="no-referrer"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-pointer-lock allow-presentation allow-storage-access-by-user-activation"
               allow="autoplay; clipboard-write; fullscreen; encrypted-media; picture-in-picture"></iframe>
             <div class="shield"></div>
@@ -94,7 +111,7 @@
     </div>
   </template>
 
-  <script src="devices.js?v=1.2.2"></script>
-  <script src="viewer.js?v=1.2.2"></script>
+  <script src="devices.js?v=1.4.1"></script>
+  <script src="viewer.js?v=1.4.1"></script>
 </body>
 </html>

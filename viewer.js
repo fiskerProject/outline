@@ -3,7 +3,9 @@
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  form: $('urlForm'), url: $('url'), slotNo: $('slotNo'), add: $('add'),
+  form: $('urlForm'), url: $('url'), chips: $('chips'), add: $('add'),
+  favsBtn: $('favsBtn'), favsCount: $('favsCount'), drawer: $('drawer'), drawerList: $('drawerList'),
+  drawerClose: $('drawerClose'), openAll: $('openAll'),
   device: $('device'), dims: $('dims'), rw: $('rw'), rh: $('rh'), pz: $('pz'), pzWrap: $('pzWrap'),
   rotate: $('rotate'), fold: $('fold'), reload: $('reload'), zoom: $('zoom'), open: $('open'),
   stage: $('stage'), grid: $('grid'), caption: $('caption'), tpl: $('slotTpl')
@@ -28,7 +30,7 @@ translate(el.tpl.content);
 
 /* ── State ────────────────────────────────────────── */
 
-const MAX_SITES = 5;
+const MAX_SITES = 6;
 const ALL = [RESPONSIVE, ...DEVICES];
 const DEFAULT_DEVICE = 'iphone-18-pro';
 const byId = (id) => ALL.find((d) => d.id === id) || ALL.find((d) => d.id === DEFAULT_DEVICE);
@@ -72,8 +74,8 @@ async function restore() {
 
 const STAND_H = 96;   // desktop stand, drawn below the monitor
 
-function spec() {
-  const d = byId(state.device);
+function spec(dev) {
+  const d = dev || byId(state.device);
   if (d.responsive) {
     return { d, responsive: true, w: state.rw, h: state.rh, screenW: state.rw, screenH: state.rh, boxW: state.rw, boxH: state.rh, frameH: state.rh };
   }
@@ -204,64 +206,34 @@ function emulation(p) {
   };
 }
 
-let tabId = null;
-const ALL_SUBRESOURCES = ['sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest',
-  'ping', 'csp_report', 'media', 'websocket', 'webtransport', 'webbundle', 'other'];
-
+// The network rules (frame headers, User-Agent, client hints) are created by
+// the service worker, scoped to this tab, and removed when this page goes away.
+let lastEmu = null;
 async function applyRules(emu) {
-  if (tabId === null) {
-    const tab = await chrome.tabs.getCurrent();
-    tabId = tab ? tab.id : -1;
-  }
-  if (tabId < 0) return;
-  const base = (tabId % 100000) * 10;
-  const addRules = [{
-    // Let sites that refuse to be framed (X-Frame-Options / CSP frame-ancestors)
-    // render inside the preview — only in this tab, only for frames.
-    id: base + 1, priority: 1,
-    action: {
-      type: 'modifyHeaders',
-      responseHeaders: [
-        { header: 'x-frame-options', operation: 'remove' },
-        { header: 'content-security-policy', operation: 'remove' }
-      ]
-    },
-    condition: { tabIds: [tabId], resourceTypes: ['sub_frame'] }
-  }];
-  if (emu.ua) {
-    const requestHeaders = [{ header: 'user-agent', operation: 'set', value: emu.ua }];
-    if (emu.os === 'android') {
-      requestHeaders.push(
-        { header: 'sec-ch-ua-mobile', operation: 'set', value: emu.mobile ? '?1' : '?0' },
-        { header: 'sec-ch-ua-platform', operation: 'set', value: '"Android"' }
-      );
-    } else {
-      requestHeaders.push(
-        { header: 'sec-ch-ua', operation: 'remove' },
-        { header: 'sec-ch-ua-mobile', operation: 'remove' },
-        { header: 'sec-ch-ua-platform', operation: 'remove' }
-      );
-    }
-    addRules.push({
-      id: base + 2, priority: 1,
-      action: { type: 'modifyHeaders', requestHeaders },
-      condition: { tabIds: [tabId], resourceTypes: ALL_SUBRESOURCES }
-    });
-  }
-  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [base + 1, base + 2], addRules });
+  lastEmu = emu;
+  const res = await chrome.runtime.sendMessage({
+    type: 'outline:apply',
+    emu: { ua: emu.ua || '', os: emu.os || '', mobile: !!emu.mobile }
+  });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'no answer');
 }
 
 window.addEventListener('pagehide', () => {
-  if (tabId === null || tabId < 0) return;
-  const base = (tabId % 100000) * 10;
-  chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [base + 1, base + 2] }).catch(() => {});
+  try { chrome.runtime.sendMessage({ type: 'outline:release' }).catch(() => {}); } catch (e) {}
+});
+// back/forward cache: the rules were dropped on pagehide, put them back
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted && lastEmu) applyRules(lastEmu).catch((err) => console.warn('[outline.] rules', err));
 });
 
 /* ── Loading ──────────────────────────────────────── */
 
+const MAX_URL = 8192;   // generous for real links, but bounded (storage, sync quota)
+
 function normalize(raw) {
-  const s = String(raw == null ? '' : raw).trim();
-  if (!s) return null;
+  if (raw != null && typeof raw !== 'string') return null;
+  const s = (raw || '').trim();
+  if (!s || s.length > MAX_URL) return null;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return /^(https?|file):\/\//i.test(s) ? s : null;
   // a path dragged or pasted from the file manager: C:\... or /Users/...
   if (/^[a-z]:[\\/]/i.test(s)) return 'file:///' + s.replace(/\\/g, '/');
@@ -283,15 +255,16 @@ function makeSlot() {
   const q = (c) => root.querySelector(c);
   const slot = {
     root, sizer: q('.sizer'), box: q('.device-box'), under: q('.frame-under'), over: q('.frame-over'),
-    screen: q('.screen'), view: q('.view'), empty: q('.empty'), name: q('.slot-name'), x: q('.slot-x'),
+    screen: q('.screen'), view: q('.view'), empty: q('.empty'), name: q('.slot-name'), x: q('.slot-x'), save: q('.slot-save'),
     emuKey: '', src: ''
   };
   const index = () => slots.indexOf(slot);
   root.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.slot-x')) return;   // removing a slot shouldn't select it first
+    if (e.target.closest('.slot-x, .slot-save')) return;   // removing a slot shouldn't select it first
     if (index() !== state.active) setActive(index());
   }, true);
   slot.x.addEventListener('click', (e) => { e.stopPropagation(); removeSite(index()); });
+  slot.save.addEventListener('click', (e) => { e.stopPropagation(); saveFromSlot(index()); });
   root.querySelectorAll('.handle').forEach((h) => wireHandle(h, slot));
   el.grid.appendChild(root);
   return slot;
@@ -311,16 +284,17 @@ function setActive(i) {
   layout();
 }
 
-function addSite() {
+function addSite(url) {
   if (state.urls.length >= MAX_SITES) return;
-  state.urls.push('');
+  const u = typeof url === 'string' ? url : '';
+  state.urls.push(u);
   state.active = state.urls.length - 1;
   syncSlots();
   save();
   layout();
   navigate(state.active, true);
-  el.url.value = '';
-  el.url.focus();
+  el.url.value = u;
+  if (!u) el.url.focus();
 }
 
 function removeSite(i) {
@@ -333,6 +307,11 @@ function removeSite(i) {
   save();
   layout();
 }
+
+const shortUrl = (u) => {
+  try { const x = new URL(u); return x.protocol === 'file:' ? decodeURIComponent(x.pathname) : (x.host + x.pathname + x.search).replace(/\/$/, ''); }
+  catch (e) { return u; }
+};
 
 const hostOf = (u) => {
   try { const x = new URL(u); return x.protocol === 'file:' ? decodeURIComponent(x.pathname.split('/').pop()) : x.host + (x.pathname !== '/' ? x.pathname : ''); }
@@ -419,6 +398,62 @@ function drawSlot(slot, p, z) {
   }
 }
 
+// Real free space in the stage, measured (paddings, caption, per-site labels).
+function room(n) {
+  const cs = getComputedStyle(el.stage);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const capCs = getComputedStyle(el.caption);
+  // only the fixed top margin: the bottom one is `auto` (it centres the content)
+  const captionH = el.caption.offsetHeight + parseFloat(capCs.marginTop);
+  const gs = getComputedStyle(el.grid);
+  const gapX = parseFloat(gs.columnGap) || 0, gapY = parseFloat(gs.rowGap) || 0;
+  let rowExtra = 0;
+  if (n > 1 && slots[0]) {
+    const cap = slots[0].root.querySelector('.slot-cap');
+    rowExtra = cap.offsetHeight + (parseFloat(getComputedStyle(slots[0].root).rowGap) || 0) + parseFloat(getComputedStyle(cap).marginTop || 0);
+  }
+  return {
+    availW: el.stage.clientWidth - padX,
+    availH: el.stage.clientHeight - padY - captionH,
+    gapX, gapY, rowExtra
+  };
+}
+
+function applyScale(p, scale, cols, responsive) {
+  slots.forEach((slot, i) => {
+    slot.box.style.transform = `scale(${scale})`;
+    slot.screen.style.outline = responsive ? `${1.5 / scale}px solid #000` : '';
+    slot.sizer.style.width = p.boxW * scale + 'px';
+    slot.sizer.style.height = p.boxH * scale + 'px';
+    // with several sites, only the last one in the first row gets the drag handles
+    slot.root.classList.toggle('resizable', i === Math.min(cols, slots.length) - 1);
+  });
+}
+
+// Numbered chips next to the link field: pick a site, × removes it.
+function renderChips(n) {
+  el.chips.hidden = n < 2;
+  if (n < 2) { el.chips.textContent = ''; return; }
+  if (el.chips.children.length !== n) {
+    el.chips.textContent = '';
+    for (let i = 0; i < n; i++) {
+      const b = document.createElement('div');
+      b.className = 'chip';
+      b.innerHTML = `<button type="button" class="chip-n"></button><button type="button" class="chip-x" aria-label="${t('removeSite', 'Remove')}" title="${t('removeSite', 'Remove')}">×</button>`;
+      b.querySelector('.chip-n').addEventListener('click', () => setActive([...el.chips.children].indexOf(b)));
+      b.querySelector('.chip-x').addEventListener('click', (e) => { e.stopPropagation(); removeSite([...el.chips.children].indexOf(b)); });
+      el.chips.appendChild(b);
+    }
+  }
+  [...el.chips.children].forEach((b, i) => {
+    b.classList.toggle('on', i === state.active);
+    const nBtn = b.querySelector('.chip-n');
+    nBtn.textContent = i + 1;
+    nBtn.title = state.urls[i] || t('emptySlot', 'empty');
+  });
+}
+
 function layout() {
   const p = spec();
   const responsive = !!p.responsive;
@@ -428,49 +463,8 @@ function layout() {
 
   for (const slot of slots) drawSlot(slot, p, z);
 
-  // pick the grid (1–3 rows) that shows the devices biggest
-  const GAP_X = 40, GAP_Y = 36, CAP = n > 1 ? 34 : 0;
-  const pad = responsive ? 24 : 10;
-  const availW = el.stage.clientWidth - 48;
-  const availH = el.stage.clientHeight - 28 - 16 - 48;
-  let scale = 1, cols = n;
-  if (frozenScale !== null) {
-    scale = frozenScale;
-    cols = lastCols;
-  } else {
-    let best = -1;
-    for (let rows = 1; rows <= Math.min(3, n); rows++) {
-      const c = Math.ceil(n / rows);
-      const r = Math.ceil(n / c);
-      const s = Math.min(
-        (availW - GAP_X * (c - 1)) / (c * (p.boxW + pad)),
-        (availH - GAP_Y * (r - 1) - CAP * r) / (r * (p.boxH + pad))
-      );
-      if (s > best + 0.001) { best = s; cols = c; }
-    }
-    scale = state.fit ? Math.max(0.08, Math.min(1, best)) : 1;
-  }
-  lastScale = scale;
-  lastCols = cols;
-  el.grid.style.gridTemplateColumns = `repeat(${cols}, auto)`;
-
-  slots.forEach((slot, i) => {
-    slot.box.style.transform = `scale(${scale})`;
-    slot.screen.style.outline = responsive ? `${1.5 / scale}px solid #000` : '';
-    slot.sizer.style.width = p.boxW * scale + 'px';
-    slot.sizer.style.height = p.boxH * scale + 'px';
-    slot.root.classList.toggle('active', n > 1 && i === state.active);
-    // with several sites, only the last one in the first row gets the drag handles
-    slot.root.classList.toggle('resizable', i === Math.min(cols, n) - 1);
-    const u = state.urls[i];
-    slot.name.textContent = `${i + 1} · ${u ? hostOf(u) : t('emptySlot', 'empty')}`;
-    slot.name.title = u || '';
-    slot.x.hidden = n < 2;
-  });
-
-  // toolbar state
-  el.slotNo.hidden = n < 2;
-  el.slotNo.textContent = state.active + 1;
+  // toolbar state (before measuring: it can change heights)
+  renderChips(n);
   el.dims.hidden = !responsive;
   if (document.activeElement !== el.rw) el.rw.value = state.rw;
   if (document.activeElement !== el.rh) el.rh.value = state.rh;
@@ -481,6 +475,69 @@ function layout() {
   el.pzWrap.hidden = !p.d.desktop;
   el.pz.value = String(state.pageZoom);
   el.zoom.textContent = state.fit ? t('fit', 'Fit') : '100%';
+  slots.forEach((slot, i) => {
+    slot.root.classList.toggle('active', n > 1 && i === state.active);
+    const u = state.urls[i];
+    slot.name.textContent = `${i + 1} · ${u ? hostOf(u) : t('emptySlot', 'empty')}`;
+    slot.name.title = u || '';
+    slot.x.hidden = n < 2;
+  });
+
+  // columns: phones side by side in one row · desktops 2 wide, then 3 × 2 ·
+  // tablets / responsive: whatever grid shows them biggest
+  const kind = p.d.desktop ? 'desktop' : (responsive || p.d.tablet || (p.d.states && !state.folded)) ? 'wide' : 'phone';
+  let cols;
+  if (frozenScale !== null) cols = lastCols;
+  else if (kind === 'phone') cols = n;
+  else if (kind === 'desktop') cols = Math.min(n, 3);
+  else cols = null;   // decided below
+  const { availW, availH, gapX, gapY, rowExtra } = room(n);
+  const PAD_W = 12, PAD_H = 8;   // side buttons stick out a little
+  const fitFor = (c, bw, bh) => {
+    const r = Math.ceil(n / c);
+    return Math.min(
+      (availW - gapX * (c - 1)) / (c * (bw + PAD_W)),
+      (availH - gapY * (r - 1) - rowExtra * r) / (r * (bh + PAD_H))
+    );
+  };
+  let scale = 1;
+  if (frozenScale !== null) {
+    scale = frozenScale;
+  } else {
+    if (cols === null) {
+      let best = -1;
+      for (let rows = 1; rows <= Math.min(3, n); rows++) {
+        const c = Math.ceil(n / rows);
+        const f = fitFor(c, p.boxW, p.boxH);
+        if (f > best + 0.001) { best = f; cols = c; }
+      }
+    }
+    if (state.fit) {
+      scale = fitFor(cols, p.boxW, p.boxH);
+      // a single desktop is never shown wider than the small desktop would be
+      if (p.d.desktop && n === 1) {
+        const small = spec(byId('desktop-s'));
+        const capW = small.boxW * Math.min(1, fitFor(1, small.boxW, small.boxH));
+        scale = Math.min(scale, capW / p.boxW);
+      }
+      scale = Math.max(0.05, Math.min(1, scale));
+    }
+  }
+  lastCols = cols;
+  el.grid.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+  applyScale(p, scale, cols, responsive);
+
+  // safety net: if anything still sticks out at the bottom, shrink to fit
+  if (state.fit && frozenScale === null) {
+    for (let k = 0; k < 2; k++) {
+      const over = el.stage.scrollHeight - el.stage.clientHeight;
+      if (over <= 1) break;
+      const used = el.grid.offsetHeight;
+      scale = Math.max(0.05, scale * (used - over - 2) / used);
+      applyScale(p, scale, cols, responsive);
+    }
+  }
+  lastScale = scale;
 
   // caption
   const approx = p.d.approx ? '≈ ' : '';
@@ -490,6 +547,7 @@ function layout() {
     ? ` <span class="m">· zoom ${Math.round(z * 100)}% →</span> ${Math.round(p.screenW / z)} × ${Math.round(p.screenH / z)} <span class="m">CSS</span>`
     : '';
   el.caption.innerHTML = `${name}${foldState} <span class="m">—</span> ${approx}${p.screenW} × ${p.screenH}${zoomInfo} <span class="m">· ${Math.round(scale * 100)}%</span>`;
+  if (typeof updateStar === 'function') updateStar();
   el.caption.title = p.d.approx ? t('approxHint', 'Approximate: derived from resolution ÷ pixel ratio') : '';
 }
 
@@ -538,7 +596,7 @@ el.url.addEventListener('paste', () => setTimeout(() => {
   if (normalize(el.url.value)) el.form.requestSubmit();
 }, 0));
 
-el.add.addEventListener('click', addSite);
+el.add.addEventListener('click', () => addSite());
 
 el.device.addEventListener('change', () => {
   state.device = el.device.value;
@@ -624,16 +682,18 @@ function wireHandle(h, slot) {
   });
 }
 
-// keyboard: R rotate · F fold · Z zoom · L link · N new site · 1–5 pick site · + − 0 page zoom
+// keyboard: R rotate · F fold · Z zoom · L link · N new site · 1–6 pick site · + − 0 page zoom
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === 'r') el.rotate.click();
   else if (k === 'f' && !el.fold.hidden) el.fold.click();
   else if (k === 'z') el.zoom.click();
+  else if (k === 'b') { e.preventDefault(); drawerOpen() ? closeDrawer() : openDrawer(); }
   else if (k === 'n') { e.preventDefault(); addSite(); }
+  else if (k === 's') { e.preventDefault(); saveFromSlot(state.active); }
   else if (k === 'l') { e.preventDefault(); el.url.focus(); el.url.select(); }
-  else if (/^[1-5]$/.test(k) && +k <= slots.length) setActive(+k - 1);
+  else if (/^[1-6]$/.test(k) && +k <= slots.length) setActive(+k - 1);
   else if ((k === '+' || k === '=' || k === '-' || k === '0') && byId(state.device).desktop) {
     const i = PAGE_ZOOMS.indexOf(state.pageZoom);
     if (k === '0') state.pageZoom = 1;
@@ -654,6 +714,198 @@ setInterval(() => {
   if (i >= 0 && i !== state.active) setActive(i);
 }, 250);
 
+
+/* ── Saved links (synced with the Chrome profile) ─── */
+
+const FAV_KEY = 'outlineFavs';
+const MAX_FAVS = 100;
+let favs = [];
+
+// Saved links live in storage.local (always) and are mirrored to storage.sync
+// in chunks that respect Chrome's 8 KB-per-item quota, so they follow the user
+// to their other Chrome profiles. The newer copy wins on load.
+const SYNC_META = FAV_KEY + ':meta';
+const SYNC_CHUNK = (i) => `${FAV_KEY}:${i}`;
+const CHUNK_BYTES = 7000;
+
+function cleanFavs(list) {
+  const seen = new Set();
+  const out = [];
+  if (Array.isArray(list)) {
+    for (const raw of list) {
+      const u = normalize(raw);
+      if (u && !seen.has(u)) { seen.add(u); out.push(u); }
+      if (out.length >= MAX_FAVS) break;
+    }
+  }
+  return out;
+}
+
+async function readSyncFavs() {
+  try {
+    const meta = (await chrome.storage.sync.get(SYNC_META))[SYNC_META];
+    if (meta && Number.isInteger(meta.n) && meta.n >= 0 && meta.n <= 50) {
+      const keys = Array.from({ length: meta.n }, (_, i) => SYNC_CHUNK(i));
+      const got = keys.length ? await chrome.storage.sync.get(keys) : {};
+      return { ts: +meta.ts || 0, list: keys.flatMap((k) => (Array.isArray(got[k]) ? got[k] : [])) };
+    }
+    // v1.3/v1.4 stored everything in one sync key
+    const old = (await chrome.storage.sync.get(FAV_KEY))[FAV_KEY];
+    if (Array.isArray(old)) return { ts: 0, list: old };
+  } catch (e) {}
+  return null;
+}
+
+async function loadFavs() {
+  let local = null;
+  try {
+    const v = (await chrome.storage.local.get(FAV_KEY))[FAV_KEY];
+    if (v && Array.isArray(v.list)) local = { ts: +v.ts || 0, list: v.list };
+    else if (Array.isArray(v)) local = { ts: 0, list: v };
+  } catch (e) {}
+  const synced = await readSyncFavs();
+  const pick = !local ? synced : !synced ? local : (synced.ts > local.ts ? synced : local);
+  favs = cleanFavs(pick ? pick.list : []);
+  renderFavs();
+}
+
+async function storeFavs() {
+  const ts = Date.now();
+  try { await chrome.storage.local.set({ [FAV_KEY]: { ts, list: favs } }); } catch (e) {}
+  try {
+    // split into chunks under the per-item quota
+    const chunks = [];
+    let cur = [], size = 2;
+    for (const u of favs) {
+      const add = JSON.stringify(u).length + 1;
+      if (cur.length && size + add > CHUNK_BYTES) { chunks.push(cur); cur = []; size = 2; }
+      cur.push(u); size += add;
+    }
+    if (cur.length) chunks.push(cur);
+    const prev = (await chrome.storage.sync.get(SYNC_META))[SYNC_META];
+    const data = { [SYNC_META]: { ts, n: chunks.length } };
+    chunks.forEach((c, i) => { data[SYNC_CHUNK(i)] = c; });
+    await chrome.storage.sync.set(data);
+    const stale = [];
+    for (let i = chunks.length; i < ((prev && prev.n) || 0); i++) stale.push(SYNC_CHUNK(i));
+    stale.push(FAV_KEY);   // old single-key format
+    await chrome.storage.sync.remove(stale);
+  } catch (e) { /* sync full or disabled: the local copy still holds everything */ }
+  renderFavs();
+}
+function saveFromSlot(i) {
+  const u = state.urls[i];
+  if (!u) return;
+  if (favs.includes(u)) {
+    favs = favs.filter((x) => x !== u);
+    storeFavs();
+    return;
+  }
+  favs.unshift(u);
+  favs = favs.slice(0, MAX_FAVS);
+  freshUrl = u;
+  storeFavs();
+  const s = slots[i] && slots[i].save;
+  if (s) { s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop'); }
+  openDrawer();
+}
+let freshUrl = '';
+
+function updateStar() {
+  slots.forEach((slot, i) => {
+    const u = state.urls[i];
+    const on = !!u && favs.includes(u);
+    slot.save.hidden = !u;
+    slot.save.classList.toggle('on', on);
+    const s = on ? t('unsaveLink', 'Remove from saved links') : t('saveLink', 'Save this link');
+    slot.save.title = s;
+    slot.save.setAttribute('aria-label', s);
+  });
+}
+function renderFavs() {
+  el.favsCount.textContent = favs.length ? String(favs.length) : '';
+  updateStar();
+  const full = state.urls.length >= MAX_SITES;
+  el.openAll.parentElement.hidden = favs.length < 2;
+  el.drawerList.textContent = '';
+  if (!favs.length) {
+    const p = document.createElement('p');
+    p.className = 'favs-empty';
+    p.textContent = t('favsEmpty', 'No saved links yet. Click the bookmark next to a device to save its site.');
+    el.drawerList.appendChild(p);
+    return;
+  }
+  favs.forEach((u) => {
+    const row = document.createElement('div');
+    row.className = 'fav' + (u === freshUrl ? ' fresh' : '');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'fav-open';
+    open.textContent = shortUrl(u);
+    open.title = `${t('openHere', 'Open here')} — ${u}`;
+    open.addEventListener('click', () => loadInto(state.active, u));
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'fav-add';
+    add.textContent = '+';
+    add.title = t('addToCompare', 'Add to compare');
+    add.disabled = full;
+    add.addEventListener('click', () => { addSite(u); renderFavs(); });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'fav-del';
+    del.textContent = '×';
+    del.title = t('deleteSaved', 'Delete from saved links');
+    del.addEventListener('click', () => { favs = favs.filter((x) => x !== u); storeFavs(); });
+    row.append(open, add, del);
+    el.drawerList.appendChild(row);
+  });
+  freshUrl = '';
+}
+const drawerOpen = () => el.drawer.classList.contains('open');
+function openDrawer() {
+  el.drawer.classList.add('open');
+  el.drawer.setAttribute('aria-hidden', 'false');
+  el.favsBtn.setAttribute('aria-expanded', 'true');
+  renderFavs();
+}
+function closeDrawer() {
+  el.drawer.classList.remove('open');
+  el.drawer.setAttribute('aria-hidden', 'true');
+  el.favsBtn.setAttribute('aria-expanded', 'false');
+}
+function openAllFavs() {
+  state.urls = favs.slice(0, MAX_SITES);
+  state.active = 0;
+  syncSlots();
+  el.url.value = state.urls[0] || '';
+  save();
+  layout();
+  navigateAll(true);
+  closeDrawer();
+}
+function loadInto(i, url) {
+  state.urls[i] = url;
+  if (i === state.active) el.url.value = url;
+  save();
+  layout();
+  navigate(i, true);
+}
+
+el.favsBtn.addEventListener('click', (e) => { e.stopPropagation(); drawerOpen() ? closeDrawer() : openDrawer(); });
+el.drawerClose.addEventListener('click', closeDrawer);
+el.openAll.addEventListener('click', openAllFavs);
+document.addEventListener('pointerdown', (e) => {
+  if (drawerOpen() && !e.target.closest('#drawer, #favsBtn, .slot-save')) closeDrawer();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+try {
+  chrome.storage.onChanged.addListener((ch, areaName) => {
+    // another device (sync), another viewer tab (local) or an older-format write
+    if (ch[SYNC_META] || (ch[FAV_KEY] && ch[FAV_KEY].newValue !== undefined)) loadFavs();
+  });
+} catch (e) {}
+
 /* ── Boot ─────────────────────────────────────────── */
 
 (async function boot() {
@@ -671,5 +923,6 @@ setInterval(() => {
   save();
   layout();
   navigateAll(true);
+  loadFavs();
   if (!state.urls[state.active]) el.url.focus();
 })();

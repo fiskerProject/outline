@@ -3,7 +3,7 @@
   "name": "__MSG_extName__",
   "short_name": "outline.",
   "description": "__MSG_extDescription__",
-  "version": "1.2.2",
+  "version": "1.4.1",
   "default_locale": "en",
   "minimum_chrome_version": "121",
   "icons": {
@@ -21,6 +21,9 @@
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src http: https: file: blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
   },
   "permissions": [
     "declarativeNetRequest",
